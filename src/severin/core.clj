@@ -7,6 +7,9 @@
   (-dispose!
     [this resource])
 
+  (-recycle!
+    [this resource uri])
+
   (-valid?
     [this resource]))
 
@@ -52,7 +55,7 @@
         (do
           (-dispose! f r)
           (create! pool-ref uri))
-        r)
+        (-recycle! f r uri))
       (-create! f uri))))
 
 (defn dispose!
