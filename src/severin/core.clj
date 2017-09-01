@@ -1,4 +1,5 @@
-(ns severin.core)
+(ns severin.core
+  "A library for implementing resource pools.")
 
 (defprotocol FactoryProtocol
   (-create!
