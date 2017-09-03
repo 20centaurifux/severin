@@ -85,4 +85,4 @@
   ([pool resource]
     (if-let [uri (:uri resource)]
       (dispose! pool uri resource)
-      (throw (IllegalArgumentException. "Couldn't get:tab URI from resource.")))))
+      (throw (IllegalArgumentException. "Couldn't get URI from resource.")))))
