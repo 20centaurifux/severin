@@ -72,7 +72,7 @@ In this example we implement a pool for input streams of local files.
 (ns severin.example
   (:require [severin.core :refer :all]))
 
-(defrecord FileReaderProtocol
+(defrecord FileReaderFactory
   []
 
   FactoryProtocol
@@ -98,7 +98,7 @@ In this example we implement a pool for input streams of local files.
 
 (defmethod factory "file"
   [uri]
-  (FileReaderProtocol.))
+  (FileReaderFactory.))
 ```
 
 Creating a BufferedInputStream for the very first time a mark is set.
