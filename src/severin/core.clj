@@ -54,7 +54,7 @@
   (dosync
     (if (> max-size (count (k @pool)))
       (some? (alter pool update-in [k] conj resource))
-     false)))
+      false)))
 
 (defn make-pool
   "Returns a new Ref with an empty hash map as initial value."
