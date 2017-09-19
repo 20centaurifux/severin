@@ -1,5 +1,5 @@
-(defproject zcfux/severin "0.1.0-SNAPSHOT"
-  :description "A library of implementing resource pools."
+(defproject zcfux/severin "0.1.0"
+  :description "A library for implementing resource pools."
   :url "https://github.com/20centaurifux/severin"
   :license {:name "GPL3"
             :url "https://www.gnu.org/licenses/gpl-3.0.txt"}
