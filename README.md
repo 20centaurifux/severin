@@ -5,6 +5,12 @@
 Severin provides a Clojure API for implementing pools of resources like network
 or database connections.
 
+## Installation
+
+The library can be installed from Clojars using Leiningen:
+
+[![Clojars Project](http://clojars.org/zcfux/severin/latest-version.svg)](https://clojars.org/zcfux/severin)
+
 ## Resource lifecycle
 
 For managing the lifecycle of a pooled resource Severin offers a protocol:
