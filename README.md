@@ -1,9 +1,9 @@
-# Severin
+# severin
 
 ## Introduction
 
-Severin provides a Clojure API for implementing pools of resources like network
-or database connections.
+severin provides a Clojure API for implementing resource pools, such as
+network and database connections.
 
 ## Installation
 
@@ -11,9 +11,33 @@ The library can be installed from Clojars using Leiningen:
 
 [![Clojars Project](http://clojars.org/zcfux/severin/latest-version.svg)](https://clojars.org/zcfux/severin)
 
+
+## Creating and releasing resources
+
+Resources have an associated URI. They are created and placed back in pool
+with create! and dispose!.
+
+```
+(defn pool (make-pool))
+
+(let [r (create! pool "monger://localhost")]
+  ; do something
+  (dispose! pool r))
+```
+
+with-pool evaluates a body in a try expression. Created resources are bound
+to names. The finally clause calls dispose! on each name.
+
+```
+(with-pool pool [db "monger://localhost"
+                 file "file:///var/log/out"]
+ ; do something
+)
+```
+
 ## Resource lifecycle
 
-For managing the lifecycle of a pooled resource Severin offers a protocol:
+The lifecycle of every resource type is managed by a factory.
 
 ```
 (defprotocol FactoryProtocol
@@ -34,16 +58,23 @@ For managing the lifecycle of a pooled resource Severin offers a protocol:
     "Tests if a resource is still valid."))
 ```
 
-## Creating and releasing resources
+The ->factory multimethod creates a factory from a URI by dispatching on the
+scheme.
 
-Resources are created and placed back in pool with the create! and dispose!
-functions. Internally a factory is created by dispatching the scheme from the
-given URI.
+```
+(defmulti ->factory
+  "Creates a factory from a URI by dispatching on the scheme."
+  #(-> %
+       java.net.URI.
+       .getScheme))
+```
 
-A pool is a Ref holding a map. It can be created with the make-pool function.
+## Pool internals
 
-Disposed resources are pushed to a queue associated by their URI. This
-association can be customized by implementing the URI->KeyProtocol:
+A pool is a Ref holding a map. It can be created with make-pool.
+
+Disposed resources are pushed onto a queue. Queues are grouped by resource
+URIs. This association can be customized by implementing the URI->KeyProtocol.
 
 ```
 (defprotocol URI->KeyProtocol
@@ -52,27 +83,27 @@ association can be customized by implementing the URI->KeyProtocol:
     "Converts a URI to a keyword."))
 ```
 
-Implementing a pool for network connections like HTTP you might want to group
-the objects by the remote server's hostname and not by their URI.  Therefore
-implement the URI->KeyProtocol protocol in your factory:
+When implementing a pool for network connections like HTTP you might want to
+group resources by hostname instead of their URI.
 
 ```
-URI->KeyProtocol
+(defrecord HttpFactory
 
-(-uri->key
-  [this uri]
-  (-> uri
-      java.net.URI.
-      .getHost
-      keyword)))
+  [...]
+
+  URI->KeyProtocol
+
+  (-uri->key
+    [this uri]
+    (-> uri
+        java.net.URI.
+        .getHost
+        keyword)))
 ```
 
-Don't forget to update the URI of recycled connection objects when you've
-implemented your own -uri->key function.
+## Factory example
 
-## Example
-
-In this example we implement a pool for input streams of local files.
+In this example we implement a pool for file input streams.
 
 ```
 (ns severin.example
@@ -80,7 +111,6 @@ In this example we implement a pool for input streams of local files.
 
 (defrecord FileReaderFactory
   []
-
   FactoryProtocol
 
   (-create!
@@ -102,48 +132,46 @@ In this example we implement a pool for input streams of local files.
     [this resource]
     true))
 
-(defmethod factory "file"
+(defmethod ->factory "file" ; this registers FileReaderFactory
   [uri]
   (FileReaderFactory.))
 ```
 
-Creating a BufferedInputStream for the very first time a mark is set.
-Recycling a stream the cursor is positioned to the beginning of the file.
+Creating a stream for the very first time a mark is set. The cursor is
+positioned to the beginning of the file when a resource is recycled.
 
-Let's create a pool and a BufferedInputStream instance:
-
-```
-=> (def p (make-pool))
-=> (def uri "file:///tmp/some/file")
-=> (def s (create! p uri))
-```
-
-Everything looks fine until you place back the resource in pool:
+Let's create a pool and open a file.
 
 ```
-=> (dispose! p s)
-=> IllegalArgumentException Couldn't get URI from resource.  severin.core/dispose! (core.clj:87)
+=> (def pool (make-pool :max-size 5)) ; queues can grow up to 5 resources
+=> (def s (create! pool "file:///tmp/some/file"))
 ```
 
-What happened here? As described before the internal used factory is
-created by dispatching the scheme from the URI. Therefore you have to specify
-the URI if it cannot be looked up from the resource.
+Everything looks fine until you place back the resource in pool.
 
 ```
-=> (dispose! p uri s)
+=> (dispose! pool s)
+=> IllegalArgumentException Couldn't get URI from resource.
 ```
 
-Alternatively you can extend the BufferedInputStream class and implement the
-clojure.lang.ILookup interface to return the URI of a resource:
+What happened here? As described before factories are created by dispatching
+on the scheme. Therefore you have to specify the URI if it's not provided by
+the resource itself.
+
+```
+=> (dispose! pool "file:///tmp/some/file" s)
+```
+
+You can fix this by adding a custom resource type which implements URIProtocol.
 
 ```
 (ns severin.filereader
   (:gen-class
    :extends java.io.BufferedInputStream
-   :implements [clojure.lang.ILookup]
    :init init
    :state state
-   :constructors {[String][java.io.InputStream]}))
+   :constructors {[String][java.io.InputStream]})
+   (:require [severin.core :refer [URIProtocol -uri]]))
 
 (defn -init
   [uri]
@@ -154,27 +182,31 @@ clojure.lang.ILookup interface to return the URI of a resource:
         java.io.FileInputStream.)]
    uri])
 
-(defn -valAt
- ([this k]
-  (-valAt this k nil))
- ([this k nv]
-  (if (= k :uri)
-    (.state this)
-    nv)))
+(extend severin.filereader
+  URIProtocol
+  {:-uri #(.state %)})
 ```
 
-Don't forget to update the factory:
+After updating the factory you can dispose resources without specifying the
+URI.
 
 ```
-(-create!
-  [this uri]
-  (let [resource (severin.filereader. uri)]
-    (.mark resource 0)
-    resource))
+=> (dispose! pool s)
 ```
 
-Now you can dispose resources without specifying the URI:
+If a resource doesn't implement URIProtocol severin tries to lookup :uri. This
+makes it possible to use maps instead of custom types.
 
 ```
-=> (dispose! p s)
+(defrecord FileReaderFactory
+  []
+  FactoryProtocol
+
+  (-create!
+    [this uri]
+    (let [stream (clojure.java.io/make-input-stream uri {})]
+      (.mark stream 0)
+      {:stream stream :uri uri}))
+
+  [...])
 ```
