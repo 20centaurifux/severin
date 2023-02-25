@@ -2,7 +2,7 @@
 
 ## Introduction
 
-severin provides a Clojure API for implementing resource pools, such as
+*severin* provides a Clojure API for implementing resource pools, such as
 network and database connections.
 
 ## Installation
@@ -15,7 +15,7 @@ The library can be installed from Clojars using Leiningen:
 ## Creating and releasing resources
 
 Resources have an associated URI. They are created and placed back in pool
-with create! and dispose!.
+with *create!* and *dispose!*.
 
 ```
 (defn pool (make-pool))
@@ -25,12 +25,12 @@ with create! and dispose!.
   (dispose! pool r))
 ```
 
-with-pool evaluates a body in a try expression. Created resources are bound
-to names. The finally clause calls dispose! on each name.
+*with-pool* evaluates a body in a try expression. Created resources are bound
+to names. The finally clause calls *dispose!* on each name.
 
 ```
 (with-pool pool [db "monger://localhost"
-                 file "file:///var/log/out"]
+                 file "file:///tmp/helloworld.txt"]
  ; do something
 )
 ```
@@ -58,11 +58,11 @@ The lifecycle of every resource type is managed by a factory.
     "Tests if a resource is still valid."))
 ```
 
-The ->factory multimethod creates a factory from a URI by dispatching on the
+The *make-factory* multimethod creates a factory from a URI by dispatching on the
 scheme.
 
 ```
-(defmulti ->factory
+(defmulti make-factory
   "Creates a factory from a URI by dispatching on the scheme."
   #(-> %
        java.net.URI.
@@ -71,10 +71,11 @@ scheme.
 
 ## Pool internals
 
-A pool is a Ref holding a map. It can be created with make-pool.
+A pool is a *Ref* holding a map. It can be created with *make-pool*.
 
 Disposed resources are pushed onto a queue. Queues are grouped by resource
-URIs. This association can be customized by implementing the URI->KeyProtocol.
+URIs. This association can be customized by implementing the
+*URI->KeyProtocol*.
 
 ```
 (defprotocol URI->KeyProtocol
@@ -84,15 +85,14 @@ URIs. This association can be customized by implementing the URI->KeyProtocol.
 ```
 
 When implementing a pool for network connections like HTTP you might want to
-group resources by hostname instead of their URI.
+group resources by hostname instead of the full URI.
 
 ```
-(defrecord HttpFactory
+(defrecord 
 
   [...]
 
   URI->KeyProtocol
-
   (-uri->key
     [this uri]
     (-> uri
@@ -109,10 +109,8 @@ In this example we implement a pool for file input streams.
 (ns severin.example
   (:require [severin.core :refer :all]))
 
-(defrecord FileReaderFactory
-  []
+(defrecord FileReaderFactory []
   FactoryProtocol
-
   (-create!
     [this uri]
     (let [resource (clojure.java.io/make-input-stream uri {})]
@@ -132,7 +130,7 @@ In this example we implement a pool for file input streams.
     [this resource]
     true))
 
-(defmethod ->factory "file" ; this registers FileReaderFactory
+(defmethod make-factory "file"
   [uri]
   (FileReaderFactory.))
 ```
@@ -162,7 +160,7 @@ the resource itself.
 => (dispose! pool "file:///tmp/some/file" s)
 ```
 
-You can fix this by adding a custom resource type which implements URIProtocol.
+You can fix this by adding a custom resource type which implements *URIProtocol*.
 
 ```
 (ns severin.filereader
@@ -194,19 +192,18 @@ URI.
 => (dispose! pool s)
 ```
 
-If a resource doesn't implement URIProtocol severin tries to lookup :uri. This
-makes it possible to use maps instead of custom types.
+If a resource doesn't implement *URIProtocol* *severin* tries to lookup :uri.
+This makes it possible to use maps instead of custom types.
 
 ```
-(defrecord FileReaderFactory
-  []
+(defrecord FileReaderFactory []
   FactoryProtocol
-
   (-create!
     [this uri]
     (let [stream (clojure.java.io/make-input-stream uri {})]
       (.mark stream 0)
-      {:stream stream :uri uri}))
+      {:uri uri
+       ::stream stream}))
 
   [...])
 ```
